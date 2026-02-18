@@ -1,0 +1,971 @@
+<!DOCTYPE html>
+<html lang="ja" class="h-full">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>千葉工業大学 体育会本部 統合管理システム</title>
+  <script src="https://cdn.tailwindcss.com/3.4.17"></script>
+  <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+JP:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf-lib/1.17.1/pdf-lib.min.js"></script>
+  <script src="https://alcdn.msauth.net/browser/2.38.0/js/msal-browser.min.js"></script>
+  <style>
+    * { font-family: 'Noto Sans JP', sans-serif; }
+    html, body { height: 100%; background: #fff; }
+    .dept-card { background:#fff; transition:all 0.3s; cursor:pointer; }
+    .dept-card:hover { transform:translateY(-4px); box-shadow:0 20px 40px rgba(0,0,0,.1); }
+    .dept-card-secretary { border:3px solid #1e3a5f; }
+    .dept-card-finance    { border:3px solid #f59e0b; }
+    .dept-card-general    { border:3px solid #1f2937; }
+    .dept-card-external   { border:3px solid #f97316; }
+    .dept-card-editorial  { border:3px solid #ec4899; }
+    .dept-card-event      { border:3px solid #06b6d4; }
+    .dept-card-admin      { border:3px solid #6b7280; }
+    .btn-sec  { background:linear-gradient(135deg,#1e3a5f,#0f1f3c); color:#fff; transition:all .2s; }
+    .btn-fin  { background:linear-gradient(135deg,#f59e0b,#d97706); color:#fff; transition:all .2s; }
+    .btn-gen  { background:linear-gradient(135deg,#1f2937,#111827); color:#fff; transition:all .2s; }
+    .btn-ext  { background:linear-gradient(135deg,#f97316,#ea580c); color:#fff; transition:all .2s; }
+    .btn-edi  { background:linear-gradient(135deg,#ec4899,#db2777); color:#fff; transition:all .2s; }
+    .btn-pri  { background:linear-gradient(135deg,#3b82f6,#2563eb); color:#fff; transition:all .2s; }
+    .btn-sec:hover,.btn-fin:hover,.btn-gen:hover,.btn-ext:hover,.btn-edi:hover,.btn-pri:hover { transform:scale(1.02); filter:brightness(.9); }
+    .btn-gray { background:#e5e7eb; color:#374151; transition:all .2s; }
+    .btn-gray:hover { background:#d1d5db; }
+    .fade-in { animation:fadeIn .4s ease-out; }
+    @keyframes fadeIn { from{opacity:0;transform:translateY(10px)} to{opacity:1;transform:translateY(0)} }
+    .data-table { border-collapse:collapse; width:100%; }
+    .data-table th { background:#f3f4f6; border:1px solid #d1d5db; padding:12px 16px; font-weight:600; color:#1f2937; }
+    .data-table td { border:1px solid #d1d5db; padding:10px 14px; color:#374151; }
+    .data-table tr:hover td { background:#f9fafb; }
+    .inp { background:#fff; border:1px solid #d1d5db; color:#1f2937; transition:border-color .2s; }
+    .inp:focus { border-color:#3b82f6; outline:none; box-shadow:0 0 0 3px rgba(59,130,246,.1); }
+    .modal-bg { background:rgba(0,0,0,.5); backdrop-filter:blur(4px); }
+    .doc-btn { padding:10px 16px; border-radius:8px; font-weight:500; transition:all .2s; cursor:pointer; border:1px solid #d1d5db; }
+    .doc-btn.active { background:#3b82f6; color:#fff; border-color:#3b82f6; }
+    .doc-btn.inactive { background:#f3f4f6; color:#6b7280; }
+    .ms-con { border:1px solid #d1d5db; border-radius:8px; background:#fff; max-height:200px; overflow-y:auto; }
+    .ms-item { padding:10px 12px; border-bottom:1px solid #e5e7eb; cursor:pointer; display:flex; align-items:center; gap:10px; }
+    .ms-item:hover { background:#f9fafb; }
+    .spinner { border:3px solid #f3f3f3; border-top:3px solid #3b82f6; border-radius:50%; width:24px; height:24px; animation:spin 1s linear infinite; display:inline-block; }
+    @keyframes spin { 0%{transform:rotate(0deg)} 100%{transform:rotate(360deg)} }
+    .ai-card { border:2px solid #e5e7eb; border-radius:12px; padding:16px; background:#fff; }
+    .ai-card.warn { border-color:#f97316; background:#fff7ed; }
+    .cf-hi { color:#16a34a; } .cf-md { color:#d97706; } .cf-lo { color:#dc2626; }
+    .row-unreturned { background:#fef9c3 !important; }
+    .row-returned   { background:#dcfce7 !important; }
+  </style>
+</head>
+<body class="h-full bg-white text-gray-900 flex flex-col overflow-hidden">
+<div id="app" class="h-full flex flex-col">
+
+<!-- Header -->
+<header class="bg-white border-b border-gray-200 px-6 py-4 flex items-center justify-between flex-shrink-0">
+  <div class="flex items-center gap-4">
+    <button id="backBtn" class="hidden btn-gray px-4 py-2 rounded-lg text-sm" onclick="navigateTo('home')">← トップに戻る</button>
+    <h1 id="pageTitle" class="text-xl font-semibold text-gray-900">体育会本部 統合管理システム</h1>
+  </div>
+  <div class="flex items-center gap-3">
+    <span id="odStatusHdr" class="text-xs text-gray-500">OneDrive: 未接続</span>
+    <div id="odDot" class="w-2 h-2 rounded-full bg-gray-300"></div>
+  </div>
+</header>
+
+<main class="flex-1 overflow-auto px-6 py-6">
+
+<!-- HOME -->
+<div id="homeScreen" class="fade-in">
+  <div class="max-w-5xl mx-auto">
+    <div class="text-center mb-12">
+      <h2 class="text-3xl font-bold mb-3 text-gray-900">千葉工業大学 体育会本部</h2>
+      <p class="text-gray-600">37クラブを統括する業務管理システム</p>
+    </div>
+    <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 mb-8">
+      <button class="dept-card dept-card-secretary rounded-2xl p-6 text-left" onclick="navigateTo('secretary')"><h3 class="text-lg font-semibold mb-2">📁 書記部</h3><p class="text-sm text-gray-600">施設予約管理・借用届処理</p></button>
+      <button class="dept-card dept-card-finance    rounded-2xl p-6 text-left" onclick="navigateTo('finance')"><h3 class="text-lg font-semibold mb-2">💰 財務部</h3><p class="text-sm text-gray-600">出納帳管理・予算管理</p></button>
+      <button class="dept-card dept-card-general    rounded-2xl p-6 text-left" onclick="navigateTo('general')"><h3 class="text-lg font-semibold mb-2">📊 総務部</h3><p class="text-sm text-gray-600">出欠管理・統計分析</p></button>
+      <button class="dept-card dept-card-external   rounded-2xl p-6 text-left" onclick="navigateTo('external')"><h3 class="text-lg font-semibold mb-2">🔗 渉外部</h3><p class="text-sm text-gray-600">課外活動届・活動報告書</p></button>
+      <button class="dept-card dept-card-editorial  rounded-2xl p-6 text-left" onclick="navigateTo('editorial')"><h3 class="text-lg font-semibold mb-2">✏️ 編集部</h3><p class="text-sm text-gray-600">団体DB管理・名簿校正</p></button>
+      <button class="dept-card dept-card-event      rounded-2xl p-6 text-left" onclick="navigateTo('event')"><h3 class="text-lg font-semibold mb-2">📅 イベント管理</h3><p class="text-sm text-gray-600">参加管理・フォルダ作成</p></button>
+    </div>
+    <div class="flex justify-center">
+      <button class="dept-card dept-card-admin rounded-xl px-8 py-4" onclick="navigateTo('admin')">
+        <h3 class="font-semibold">🔒 管理 &amp; 設定</h3>
+        <p class="text-xs text-gray-500">システム設定・権限管理</p>
+      </button>
+    </div>
+  </div>
+</div>
+
+<!-- SECRETARY -->
+<div id="secretaryScreen" class="hidden fade-in">
+  <div class="max-w-6xl mx-auto">
+    <div class="bg-white rounded-2xl p-6 border border-gray-200">
+      <h2 class="text-xl font-semibold mb-6">書記部 - 施設予約管理</h2>
+      <div class="bg-blue-50 rounded-xl p-6 mb-6 border border-blue-200">
+        <h3 class="font-medium mb-4">📄 借用届PDFを選択</h3>
+        <input type="file" id="secPdfInput" accept=".pdf" class="block w-full text-sm text-gray-500 file:mr-4 file:py-2 file:px-4 file:rounded-lg file:border-0 file:bg-blue-100 file:text-blue-700 mb-3">
+        <div class="flex gap-3 flex-wrap">
+          <button class="btn-sec px-6 py-3 rounded-lg font-medium" onclick="analyzeSecretaryPDF()">🤖 AI読取開始</button>
+          <label class="flex items-center gap-2 text-sm text-gray-600 cursor-pointer"><input type="checkbox" id="secTestMode"> ⚙️ テストモード</label>
+        </div>
+      </div>
+      <div id="secAiResults" class="space-y-4 mb-6"></div>
+      <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
+        <div class="bg-gray-50 rounded-xl p-6 border border-gray-200">
+          <h3 class="font-medium mb-4">📋 施設使用願を記録</h3>
+          <div class="space-y-3 mb-4">
+            <div><label class="block text-xs text-gray-600 mb-1">施設</label>
+              <select id="secFacility" class="inp w-full px-4 py-2 rounded-lg" onchange="handleFacilityChange()">
+                <option value="">選択</option>
+                <option>体育館</option><option>トレーニングルーム</option><option>陸上競技場</option><option>野球場</option>
+                <option>ビーチバレー</option><option>ハンドボールコート</option><option>テニスコート</option>
+                <option>ラグビー場</option><option>サッカー場</option><option>武道館（剣道場・柔道場）</option>
+                <option>多目的ルーム</option><option>武道場（空手道場）</option><option>部室棟会議室</option>
+                <option>射撃場</option><option>弓道場</option><option>屋内練習場</option><option>新習志野野球場</option>
+                <option value="新規追加">➕ 新規追加</option>
+              </select>
+            </div>
+            <div><label class="block text-xs text-gray-600 mb-1">団体名</label><select id="secClub" class="inp w-full px-4 py-2 rounded-lg"></select></div>
+            <div><label class="block text-xs text-gray-600 mb-1">日付</label><input type="date" id="secDate" class="inp w-full px-4 py-2 rounded-lg"></div>
+            <div class="grid grid-cols-2 gap-3">
+              <div><label class="block text-xs text-gray-600 mb-1">開始</label><input type="time" id="secStartTime" class="inp w-full px-4 py-2 rounded-lg"></div>
+              <div><label class="block text-xs text-gray-600 mb-1">終了</label><input type="time" id="secEndTime" class="inp w-full px-4 py-2 rounded-lg"></div>
+            </div>
+          </div>
+          <div class="flex gap-3 flex-wrap">
+            <button class="btn-sec px-5 py-2 rounded-lg font-medium" onclick="saveSecretaryEntry()">✅ Excel生成＆OneDrive保存</button>
+            <button class="btn-gray px-4 py-2 rounded-lg text-sm" onclick="savePDFToOneDrive('secretary')">📁 PDF原本を保存</button>
+          </div>
+        </div>
+        <div class="bg-orange-50 rounded-xl p-6 border border-orange-200">
+          <h3 class="font-medium mb-3">📝 保存済み一覧</h3>
+          <div id="secSavedList" class="space-y-2 max-h-64 overflow-y-auto"><p class="text-sm text-gray-500">保存済みなし</p></div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- FINANCE -->
+<div id="financeScreen" class="hidden fade-in">
+  <div class="max-w-6xl mx-auto">
+    <div class="bg-white rounded-2xl p-6 border border-gray-200">
+      <h2 class="text-xl font-semibold mb-6">財務部 - 出納帳管理</h2>
+      <div class="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
+        <div class="bg-emerald-50 rounded-xl p-4 border border-emerald-200"><p class="text-sm text-emerald-700 mb-1">手許現金</p><p id="finCash" class="text-2xl font-bold text-emerald-900">¥0</p></div>
+        <div class="bg-blue-50 rounded-xl p-4 border border-blue-200"><p class="text-sm text-blue-700 mb-1">通帳残高</p><p id="finBank" class="text-2xl font-bold text-blue-900">¥0</p></div>
+        <div class="bg-gray-50 rounded-xl p-4 border border-gray-200"><p class="text-sm text-gray-700 mb-1">合計残高</p><p id="finTotal" class="text-2xl font-bold text-gray-900">¥0</p></div>
+      </div>
+      <div class="bg-gray-50 rounded-xl p-6 mb-6 border border-gray-200">
+        <h3 class="font-medium mb-4">新規取引入力</h3>
+        <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 mb-4">
+          <div><label class="block text-xs text-gray-600 mb-1">日付</label><input type="date" id="finDate" class="inp w-full px-4 py-2 rounded-lg"></div>
+          <div><label class="block text-xs text-gray-600 mb-1">行事・科目</label>
+            <div class="flex gap-2"><select id="finSubject" class="inp flex-1 px-4 py-2 rounded-lg"></select><button onclick="addFinanceSubject()" class="btn-gray px-3 py-2 rounded-lg text-sm">+</button></div>
+          </div>
+          <div><label class="block text-xs text-gray-600 mb-1">摘要</label><input type="text" id="finMemo" class="inp w-full px-4 py-2 rounded-lg" placeholder="内容を入力"></div>
+          <div><label class="block text-xs text-gray-600 mb-1">支払方法</label>
+            <div class="flex gap-4 mt-2">
+              <label class="flex items-center gap-1 cursor-pointer"><input type="radio" name="finPayment" value="現金" checked><span class="text-sm">現金</span></label>
+              <label class="flex items-center gap-1 cursor-pointer"><input type="radio" name="finPayment" value="通帳"><span class="text-sm">通帳</span></label>
+            </div>
+          </div>
+          <div><label class="block text-xs text-gray-600 mb-1">収入（円）</label><input type="number" id="finIncome" class="inp w-full px-4 py-2 rounded-lg" placeholder="0"></div>
+          <div><label class="block text-xs text-gray-600 mb-1">支出（円）</label><input type="number" id="finExpense" class="inp w-full px-4 py-2 rounded-lg" placeholder="0"></div>
+        </div>
+        <div class="flex items-center gap-6 mb-4">
+          <span class="text-xs text-gray-600">立替状態</span>
+          <label class="flex items-center gap-1 cursor-pointer"><input type="radio" name="finReplace" value="/" checked><span class="text-sm">/</span></label>
+          <label class="flex items-center gap-1 cursor-pointer"><input type="radio" name="finReplace" value="未返金"><span class="text-sm">未返金</span></label>
+          <label class="flex items-center gap-1 cursor-pointer"><input type="radio" name="finReplace" value="返金済"><span class="text-sm">返金済</span></label>
+        </div>
+        <button class="btn-fin px-6 py-3 rounded-lg font-medium" onclick="addFinanceEntry()">➕ 追加</button>
+      </div>
+      <div class="bg-gray-50 rounded-xl overflow-hidden border border-gray-200 mb-4">
+        <div class="overflow-x-auto max-h-80">
+          <table class="data-table text-sm">
+            <thead><tr><th>日付</th><th>科目</th><th>摘要</th><th>支払</th><th>収入</th><th>支出</th><th>立替</th><th>操作</th></tr></thead>
+            <tbody id="finLedger"><tr><td colspan="8" class="text-center text-gray-500 py-4">データなし</td></tr></tbody>
+          </table>
+        </div>
+      </div>
+      <div class="flex gap-3 flex-wrap">
+        <button class="btn-pri px-5 py-3 rounded-xl font-bold" onclick="exportFinanceMonthly()">📄 月別Excel→OneDrive</button>
+        <button class="px-5 py-3 rounded-xl font-bold text-white" style="background:linear-gradient(135deg,#7c3aed,#5b21b6)" onclick="exportFinanceYearly()">📄 年度末出力→OneDrive</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- GENERAL -->
+<div id="generalScreen" class="hidden fade-in">
+  <div class="max-w-7xl mx-auto">
+    <div class="bg-white rounded-2xl p-6 border border-gray-200">
+      <h2 class="text-xl font-semibold mb-6">総務部 - 出欠管理・統計</h2>
+      <div class="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-6">
+        <div class="space-y-6">
+          <div class="bg-gray-50 rounded-xl p-6 border border-gray-200">
+            <h3 class="font-medium mb-4">📅 学期選択</h3>
+            <select id="genTerm" class="inp w-full px-4 py-2 rounded-lg" onchange="loadBusinessDays()">
+              <option>前期 (4月〜7月)</option><option>夏季休業 第1週</option><option>夏季休業 第2週</option><option>夏季休業 第3週</option>
+              <option>後期 (9月〜12月)</option><option>冬季休業 第1週</option><option>冬季休業 第2週</option><option>冬季休業 第3週</option>
+            </select>
+          </div>
+          <div class="bg-blue-50 rounded-xl p-6 border border-blue-200">
+            <h3 class="font-medium mb-4">👥 曜日担当設定</h3>
+            <select id="genWeekday" class="inp w-full px-4 py-2 rounded-lg mb-3" onchange="showMembersForWeekday()">
+              <option value="">選択</option><option>月</option><option>火</option><option>水</option><option>木</option><option>金</option><option>土</option><option>日</option>
+            </select>
+            <div class="ms-con mb-3" id="genWeekdayMembers"><div class="text-gray-500 text-sm p-4">曜日を選択してください</div></div>
+            <button class="btn-gen w-full px-4 py-2 rounded-lg" onclick="saveWeekdayAssignment()">設定を保存</button>
+          </div>
+          <div class="bg-emerald-50 rounded-xl p-6 border border-emerald-200">
+            <h3 class="font-medium mb-4">✍️ 出欠記録</h3>
+            <input type="date" id="genAttDate" class="inp w-full px-4 py-2 rounded-lg mb-3" onchange="showMembersForDate()">
+            <div class="ms-con mb-3" id="genAttMembers"><div class="text-gray-500 text-sm p-4">日付を選択してください</div></div>
+            <select id="genAttStatus" class="inp w-full px-4 py-2 rounded-lg mb-3">
+              <option value="">選択</option><option>出席</option><option>欠席</option><option>遅刻</option><option>早退</option><option>忌引・体調不良</option>
+            </select>
+            <button class="btn-gen w-full px-6 py-2 rounded-lg" onclick="recordAttendance()">記録する</button>
+          </div>
+        </div>
+        <div class="bg-gray-50 rounded-xl p-6 border border-gray-200">
+          <h3 class="font-medium mb-4">📊 出欠割合統計</h3>
+          <div class="space-y-3" id="genStats">
+            <div class="bg-white rounded-lg p-4 border border-gray-200"><div class="flex justify-between mb-2"><span class="text-sm font-medium">出席</span><span class="text-2xl font-bold text-emerald-600" id="st-出席">0%</span></div><div class="w-full bg-gray-200 rounded-full h-2"><div class="bg-emerald-500 h-2 rounded-full" id="br-出席" style="width:0%"></div></div></div>
+            <div class="bg-white rounded-lg p-4 border border-gray-200"><div class="flex justify-between mb-2"><span class="text-sm font-medium">欠席</span><span class="text-2xl font-bold text-rose-600" id="st-欠席">0%</span></div><div class="w-full bg-gray-200 rounded-full h-2"><div class="bg-rose-500 h-2 rounded-full" id="br-欠席" style="width:0%"></div></div></div>
+            <div class="bg-white rounded-lg p-4 border border-gray-200"><div class="flex justify-between mb-2"><span class="text-sm font-medium">遅刻</span><span class="text-2xl font-bold text-amber-600" id="st-遅刻">0%</span></div><div class="w-full bg-gray-200 rounded-full h-2"><div class="bg-amber-500 h-2 rounded-full" id="br-遅刻" style="width:0%"></div></div></div>
+            <div class="bg-white rounded-lg p-4 border border-gray-200"><div class="flex justify-between mb-2"><span class="text-sm font-medium">早退</span><span class="text-2xl font-bold text-purple-600" id="st-早退">0%</span></div><div class="w-full bg-gray-200 rounded-full h-2"><div class="bg-purple-500 h-2 rounded-full" id="br-早退" style="width:0%"></div></div></div>
+            <div class="bg-white rounded-lg p-4 border border-gray-200"><div class="flex justify-between mb-2"><span class="text-sm font-medium">忌引・体調不良</span><span class="text-2xl font-bold text-blue-600" id="st-忌引・体調不良">0%</span></div><div class="w-full bg-gray-200 rounded-full h-2"><div class="bg-blue-500 h-2 rounded-full" id="br-忌引・体調不良" style="width:0%"></div></div></div>
+          </div>
+        </div>
+      </div>
+      <div class="bg-gray-50 rounded-xl overflow-hidden border border-gray-200">
+        <div class="overflow-x-auto">
+          <table class="data-table text-sm">
+            <thead><tr><th>担当者</th><th>曜日</th><th>営業日</th><th>出席</th><th>欠席</th><th>遅刻</th><th>早退</th><th>忌引</th><th>出席率</th></tr></thead>
+            <tbody id="genMemberBody"><tr><td colspan="9" class="text-center text-gray-500 py-4">データなし</td></tr></tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- EXTERNAL -->
+<div id="externalScreen" class="hidden fade-in">
+  <div class="max-w-6xl mx-auto">
+    <div class="bg-white rounded-2xl p-6 border border-gray-200">
+      <h2 class="text-xl font-semibold mb-6">渉外部 - 課外活動届処理</h2>
+      <div class="bg-blue-50 rounded-xl p-6 mb-6 border border-blue-200">
+        <h3 class="font-medium mb-4">📄 PDFを選択</h3>
+        <input type="file" id="extPdfInput" accept=".pdf" class="block w-full text-sm text-gray-500 file:mr-4 file:py-2 file:px-4 file:rounded-lg file:border-0 file:bg-orange-100 file:text-orange-700 mb-3">
+        <div class="flex gap-3 flex-wrap">
+          <button class="btn-ext px-6 py-3 rounded-lg font-medium" onclick="analyzeExternalPDF()">🤖 AI分類・読取開始</button>
+          <label class="flex items-center gap-2 text-sm text-gray-600 cursor-pointer"><input type="checkbox" id="extTestMode"> ⚙️ テストモード</label>
+        </div>
+      </div>
+      <div class="flex gap-3 mb-6">
+        <button id="extActBtn" class="doc-btn active" onclick="selectExtDocType('activity')">📋 課外活動届</button>
+        <button id="extRepBtn" class="doc-btn inactive" onclick="selectExtDocType('report')">📝 活動報告書</button>
+      </div>
+      <div id="extAiResults" class="space-y-4 mb-6"></div>
+      <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
+        <div id="actForm" class="bg-gray-50 rounded-xl p-6 border border-gray-200">
+          <h3 class="font-medium mb-4">📋 課外活動届情報</h3>
+          <div class="space-y-3 mb-4">
+            <div><label class="block text-xs text-gray-600 mb-1">団体名</label><select id="extClubAct" class="inp w-full px-4 py-2 rounded-lg"></select></div>
+            <div><label class="block text-xs text-gray-600 mb-1">期間</label><input type="text" id="extPeriod" class="inp w-full px-4 py-2 rounded-lg" placeholder="5月1日〜31日"></div>
+            <div class="flex gap-4">
+              <label class="flex items-center gap-2 cursor-pointer"><input type="checkbox" id="extIsExtra"><span class="text-sm">課外</span></label>
+              <label class="flex items-center gap-2 cursor-pointer"><input type="checkbox" id="extIsOvernight"><span class="text-sm">宿泊</span></label>
+              <label class="flex items-center gap-2 cursor-pointer"><input type="checkbox" id="extIsOfficial"><span class="text-sm">公式戦</span></label>
+            </div>
+            <div><label class="block text-xs text-gray-600 mb-1">大会名</label><input type="text" id="extTournament" class="inp w-full px-4 py-2 rounded-lg"></div>
+          </div>
+          <div class="flex gap-3 flex-wrap">
+            <button class="btn-ext px-5 py-2 rounded-lg font-medium" onclick="saveExternalEntry()">✅ Excel更新＆OneDrive保存</button>
+            <button class="btn-gray px-4 py-2 rounded-lg text-sm" onclick="savePDFToOneDrive('external')">📁 PDF保存</button>
+          </div>
+        </div>
+        <div id="repForm" class="hidden bg-gray-50 rounded-xl p-6 border border-gray-200">
+          <h3 class="font-medium mb-4">📝 活動報告書情報</h3>
+          <div class="space-y-3 mb-4">
+            <div><label class="block text-xs text-gray-600 mb-1">団体名</label><select id="extClubRep" class="inp w-full px-4 py-2 rounded-lg"></select></div>
+            <div><label class="block text-xs text-gray-600 mb-1">報告種別</label><input type="text" id="extRepType" class="inp w-full px-4 py-2 rounded-lg" placeholder="試合 / 練習 / その他"></div>
+            <div><label class="block text-xs text-gray-600 mb-1">主催</label><input type="text" id="extOrg" class="inp w-full px-4 py-2 rounded-lg"></div>
+            <div><label class="block text-xs text-gray-600 mb-1">出場者数</label><input type="number" id="extNum" class="inp w-full px-4 py-2 rounded-lg" placeholder="0"></div>
+            <div><label class="block text-xs text-gray-600 mb-1">団体成績</label><input type="text" id="extTeamRes" class="inp w-full px-4 py-2 rounded-lg"></div>
+            <div><label class="block text-xs text-gray-600 mb-1">個人成績</label><textarea id="extIndRes" class="inp w-full px-4 py-2 rounded-lg" rows="2"></textarea></div>
+          </div>
+          <div class="flex gap-3 flex-wrap">
+            <button class="btn-ext px-5 py-2 rounded-lg font-medium" onclick="saveExternalEntry()">✅ Excel更新＆OneDrive保存</button>
+            <button class="btn-gray px-4 py-2 rounded-lg text-sm" onclick="savePDFToOneDrive('external')">📁 PDF保存</button>
+          </div>
+        </div>
+        <div class="bg-orange-50 rounded-xl p-6 border border-orange-200 h-fit">
+          <h3 class="font-medium mb-3">📝 保存済み一覧</h3>
+          <div id="extSavedList" class="space-y-2 max-h-60 overflow-y-auto"><p class="text-sm text-gray-500">保存済みなし</p></div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- EDITORIAL -->
+<div id="editorialScreen" class="hidden fade-in">
+  <div class="max-w-7xl mx-auto">
+    <div class="bg-white rounded-2xl p-6 border border-gray-200">
+      <h2 class="text-xl font-semibold mb-6">編集部 - 団体DB管理</h2>
+      <div class="flex gap-3 mb-6">
+        <button id="rosterEditBtn" class="btn-edi px-6 py-2 rounded-lg text-sm" onclick="switchRosterMode('edit')">⚙️ DB編集</button>
+        <button id="rosterProcBtn" class="btn-gray px-6 py-2 rounded-lg text-sm" onclick="switchRosterMode('procure')">📋 名簿校正</button>
+      </div>
+      <div id="rosterEditMode">
+        <div class="bg-gray-50 rounded-xl p-6 border border-gray-200">
+          <h3 class="font-medium mb-4">団体情報編集</h3>
+          <select id="editClubSel" class="inp w-full px-4 py-2 rounded-lg mb-4"></select>
+          <div class="grid grid-cols-1 md:grid-cols-2 gap-6 mb-6">
+            <div>
+              <h4 class="font-medium mb-3">基本情報</h4>
+              <div class="space-y-3">
+                <div><label class="block text-xs text-gray-600 mb-1">団体名</label><input type="text" id="clubName" class="inp w-full px-4 py-2 rounded-lg"></div>
+                <div><label class="block text-xs text-gray-600 mb-1">区分</label>
+                  <select id="clubCat" class="inp w-full px-4 py-2 rounded-lg"><option>部</option><option>同好会</option><option>愛好会</option></select>
+                </div>
+              </div>
+            </div>
+            <div>
+              <h4 class="font-medium mb-3">顧問情報</h4>
+              <textarea id="advisorNames" class="inp w-full px-4 py-2 rounded-lg" rows="4" placeholder="顧問名（1行1名）"></textarea>
+            </div>
+          </div>
+          <div class="mb-6">
+            <h4 class="font-medium mb-3">必須項目設定</h4>
+            <div class="flex flex-wrap gap-4">
+              <label class="flex items-center gap-2 cursor-pointer"><input type="checkbox" id="fGender" checked><span class="text-sm">性別</span></label>
+              <label class="flex items-center gap-2 cursor-pointer"><input type="checkbox" id="fBirth" checked><span class="text-sm">生年月日</span></label>
+              <label class="flex items-center gap-2 cursor-pointer"><input type="checkbox" id="fPhone" checked><span class="text-sm">携帯電話</span></label>
+              <label class="flex items-center gap-2 cursor-pointer"><input type="checkbox" id="fGuardian"><span class="text-sm">保証人携帯</span></label>
+              <label class="flex items-center gap-2 cursor-pointer"><input type="checkbox" id="fAddress"><span class="text-sm">住所</span></label>
+            </div>
+          </div>
+          <div class="flex gap-3">
+            <button class="btn-edi px-6 py-2 rounded-lg" onclick="saveClubData()">💾 保存</button>
+            <button class="btn-gray px-6 py-2 rounded-lg" onclick="resetClubForm()">↺ リセット</button>
+          </div>
+        </div>
+      </div>
+      <div id="rosterProcMode" class="hidden">
+        <div class="bg-blue-50 rounded-xl p-6 border border-blue-200 mb-4">
+          <h3 class="font-medium mb-4">📊 Excelから校正</h3>
+          <div class="flex gap-3 flex-wrap mb-3">
+            <input type="file" id="editExcelInput" accept=".xlsx,.xls" class="text-sm text-gray-500 file:mr-4 file:py-2 file:px-4 file:rounded-lg file:border-0 file:bg-pink-100 file:text-pink-700">
+            <button class="btn-edi px-6 py-2 rounded-lg" onclick="loadRosterExcel()">読み込む</button>
+          </div>
+        </div>
+        <div id="rosterPreviewSec" class="hidden bg-gray-50 rounded-xl p-6 border border-gray-200">
+          <h3 class="font-medium mb-3">📋 プレビュー</h3>
+          <div class="overflow-x-auto max-h-80 overflow-y-auto mb-4" id="rosterPreviewDiv"></div>
+          <div class="flex gap-3">
+            <button class="btn-edi px-6 py-2 rounded-lg" onclick="saveRoster()">✓ 確定・保存</button>
+            <button class="btn-gray px-6 py-2 rounded-lg" onclick="document.getElementById('rosterPreviewSec').classList.add('hidden')">キャンセル</button>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- EVENT -->
+<div id="eventScreen" class="hidden fade-in">
+  <div class="max-w-6xl mx-auto">
+    <div class="bg-white rounded-2xl p-6 border border-gray-200">
+      <h2 class="text-xl font-semibold mb-6">イベント管理</h2>
+      <div class="flex gap-3 mb-6">
+        <button id="evModeBtn" class="doc-btn active" onclick="selectEventMode('event')">🎉 イベント</button>
+        <button id="evFolderBtn" class="doc-btn inactive" onclick="selectEventMode('folder')">📁 フォルダ作成</button>
+      </div>
+      <div id="evEventSec">
+        <div class="bg-blue-50 rounded-xl p-6 border border-blue-200 mb-4">
+          <h3 class="font-medium mb-4">🔗 Googleフォーム連携</h3>
+          <input type="text" id="evFormUrl" class="inp w-full px-4 py-2 rounded-lg mb-3" placeholder="GoogleフォームのURLを入力">
+          <button class="btn-pri px-6 py-3 rounded-lg font-medium" onclick="checkFormResponses()">集計する</button>
+        </div>
+        <div id="evResults" class="space-y-3 mb-4"></div>
+        <div class="bg-gray-50 rounded-xl overflow-hidden border border-gray-200">
+          <div class="overflow-x-auto">
+            <table class="data-table text-sm">
+              <thead><tr><th>氏名</th><th>所属</th><th>提出状態</th></tr></thead>
+              <tbody id="evSubBody"><tr><td colspan="3" class="text-center text-gray-500 py-4">データなし</td></tr></tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+      <div id="evFolderSec" class="hidden">
+        <div class="bg-blue-50 rounded-xl p-6 border border-blue-200">
+          <h3 class="font-medium mb-4">📁 団体フォルダを一括作成</h3>
+          <label class="block text-sm font-medium mb-2">団体を選択（複数可）</label>
+          <div class="ms-con mb-4" id="evClubSelect"></div>
+          <div class="mb-4"><label class="block text-xs text-gray-600 mb-1">サブフォルダ名（カンマ区切り）</label>
+            <input type="text" id="evSubfolders" class="inp w-full px-4 py-2 rounded-lg" value="会議資料,出欠管理,会計報告">
+          </div>
+          <button class="btn-pri px-6 py-3 rounded-lg font-medium" onclick="createFolders()">➕ フォルダを作成</button>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ADMIN -->
+<div id="adminScreen" class="hidden fade-in">
+  <div class="max-w-6xl mx-auto">
+    <div class="bg-white rounded-2xl p-6 border border-gray-200">
+      <h2 class="text-xl font-semibold mb-6">管理 &amp; 設定</h2>
+      <div id="adminAuthSec" class="bg-gray-50 rounded-xl p-6 mb-6 border border-gray-200">
+        <h3 class="font-medium mb-4">🔐 管理者認証</h3>
+        <div class="flex gap-4">
+          <input type="password" id="adminPw" class="inp px-4 py-2 rounded-lg flex-1" placeholder="管理パスワード">
+          <button class="btn-pri px-6 py-2 rounded-lg" onclick="authenticate()">🔓 認証</button>
+        </div>
+        <p id="adminAuthMsg" class="text-red-500 text-sm mt-2 hidden"></p>
+      </div>
+      <div id="adminContent" class="hidden space-y-6">
+        <div class="bg-gray-50 rounded-xl p-6 border border-gray-200">
+          <h3 class="font-medium mb-4">👥 本部員管理</h3>
+          <div id="adminMembersList" class="space-y-2 max-h-60 overflow-y-auto mb-4"></div>
+          <div class="grid grid-cols-2 md:grid-cols-4 gap-2 text-sm">
+            <input type="text" id="newMemberName" class="inp border rounded px-2 py-1" placeholder="名前">
+            <select id="newMemberDept" class="inp border rounded px-2 py-1"><option>書記部</option><option>財務部</option><option>総務部</option><option>渉外部</option><option>編集部</option><option>イベント</option></select>
+            <select id="newMemberDay" class="inp border rounded px-2 py-1"><option>月</option><option>火</option><option>水</option><option>木</option><option>金</option><option>土</option><option>日</option></select>
+            <button onclick="addMember()" class="btn-pri rounded py-1 font-bold">追加</button>
+          </div>
+        </div>
+        <div class="bg-gray-50 rounded-xl p-6 border border-gray-200">
+          <h3 class="font-medium mb-4">📚 勉強週間設定</h3>
+          <div id="adminStudyWeeks" class="space-y-2 mb-3"></div>
+          <div class="flex gap-2">
+            <input type="date" id="swStart" class="inp flex-1 border rounded px-2 py-1 text-sm">
+            <input type="date" id="swEnd" class="inp flex-1 border rounded px-2 py-1 text-sm">
+            <button onclick="addStudyWeek()" class="btn-pri px-3 py-1 rounded text-sm">追加</button>
+          </div>
+        </div>
+        <div class="bg-gray-50 rounded-xl p-6 border border-gray-200">
+          <h3 class="font-medium mb-4">☁️ OneDrive連携</h3>
+          <div id="adminOdStatus" class="text-sm text-gray-500 mb-3">未接続</div>
+          <div class="flex gap-3">
+            <button onclick="loginOneDrive()" class="btn-pri px-5 py-2 rounded-lg font-bold">Microsoftアカウントでログイン</button>
+            <button onclick="logoutOneDrive()" class="btn-gray px-5 py-2 rounded-lg text-sm">ログアウト</button>
+          </div>
+        </div>
+        <div class="bg-gray-50 rounded-xl p-6 border border-gray-200">
+          <h3 class="font-medium mb-4">🤖 Gemini APIキー設定</h3>
+          <div class="flex gap-2">
+            <input type="password" id="geminiKey" class="inp flex-1 border rounded-lg px-3 py-2 text-sm" placeholder="AIzaSy...">
+            <button onclick="saveGeminiKey()" class="btn-pri px-4 py-2 rounded-lg font-bold">保存</button>
+          </div>
+        </div>
+        <div class="bg-gray-50 rounded-xl p-6 border border-gray-200">
+          <h3 class="font-medium mb-4">🔑 パスワード変更</h3>
+          <div class="space-y-2">
+            <input type="password" id="pwOld" class="inp w-full border rounded-lg px-3 py-2 text-sm" placeholder="現在のパスワード">
+            <input type="password" id="pwNew" class="inp w-full border rounded-lg px-3 py-2 text-sm" placeholder="新しいパスワード">
+            <button onclick="changePassword()" class="bg-red-600 text-white px-5 py-2 rounded-lg w-full font-bold hover:bg-red-700">変更する</button>
+          </div>
+          <p id="pwMsg" class="text-sm mt-2"></p>
+        </div>
+        <div class="bg-gray-50 rounded-xl p-6 border border-gray-200">
+          <h3 class="font-medium mb-2">ℹ️ システム情報</h3>
+          <p class="text-sm text-gray-600">バージョン: 1.0.0 | 管理団体数: 37団体</p>
+          <p id="adminLastUpdate" class="text-sm text-gray-600">最終更新: -</p>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+</main>
+
+<footer class="bg-gray-100 border-t border-gray-200 px-6 py-3 text-center text-xs text-gray-600 flex-shrink-0">
+  千葉工業大学 体育会本部 統合管理システム v1.0 | © 2025
+</footer>
+</div>
+
+<!-- Toast -->
+<div id="toast" class="fixed bottom-6 right-6 bg-gray-800 text-white rounded-xl px-6 py-4 shadow-2xl transform translate-y-20 opacity-0 transition-all duration-300 z-50">
+  <span id="toastMsg">完了</span>
+</div>
+
+<!-- Loading -->
+<div id="loadingOvl" class="fixed inset-0 bg-black bg-opacity-40 flex items-center justify-center hidden z-50">
+  <div class="bg-white rounded-2xl p-8 flex flex-col items-center gap-4">
+    <div class="spinner"></div>
+    <p id="loadingMsg" class="text-gray-700 font-bold">処理中...</p>
+  </div>
+</div>
+
+<!-- 施設追加モーダル -->
+<div id="modalFacility" class="hidden fixed inset-0 modal-bg flex items-center justify-center z-50">
+  <div class="bg-white rounded-2xl p-6 w-96 shadow-xl">
+    <h3 class="font-semibold mb-4">新しい施設を追加</h3>
+    <input type="text" id="newFacName" class="inp w-full px-4 py-2 rounded-lg mb-4" placeholder="施設名">
+    <div class="flex gap-3">
+      <button class="flex-1 btn-sec px-4 py-2 rounded-lg" onclick="confirmNewFacility()">追加</button>
+      <button class="flex-1 btn-gray px-4 py-2 rounded-lg" onclick="document.getElementById('modalFacility').classList.add('hidden')">キャンセル</button>
+    </div>
+  </div>
+</div>
+
+<script>
+const GAS_URL = "https://script.google.com/macros/s/AKfycby1IkqujrZVOEzZ4nbMUBD1XS1iPu2t0ahb6dVp_88rDG04W9D5OCc2S17pB6TwzcpemA/exec";
+const OD_BASE = "体育会本部";
+const MSAL_CFG = {
+  auth: {
+    clientId: "YOUR_CLIENT_ID",
+    authority: "https://login.microsoftonline.com/common",
+    redirectUri: "https://Goto-0520.github.io/taiikukai-system/callback.html"
+  }
+};
+
+const CLUBS = ["合気道部","ウィンドサーフィン部","空手道部","弓道部","剣道部","航空部","硬式庭球部","硬式野球部","ゴルフ部","サイクリング部","サッカー同好会","サバイバルゲーム同好会","山岳部","自動車部","少林寺拳法部","射撃部","柔道部","水泳","スキューバダイビング同好会","躰道部","第二テニス同好会","卓球部","テコンドー愛好会","軟式野球部","二輪同好会","バスケットボール同好会","バドミントン部","バレーボール同好会","ハンドボール部","ビーチバレー愛好会","フォークダンス部","フットサル愛好会","フライングディスク愛好会","よさこいソーラン風神部","ラグビー部","陸上競技部","ワンダーフォーゲル同好会"];
+const DEF_SUBJ = ["前月繰越金","預金口座入金","預金口座出金","団体活動費","臨時徴収金","OB援助金","企画費","総務費","渉外費","交通費"];
+
+let msalInst=null, msalAcc=null;
+let members=[], finEntries=[], finSubjs=[...DEF_SUBJ], attData=[], studyWks=[];
+let secPDF=null, extPDF=null, secAI=[], extAI=[], extDocType='activity';
+
+window.onload = async () => {
+  try { msalInst=new msal.PublicClientApplication(MSAL_CFG); await msalInst.initialize(); const a=msalInst.getAllAccounts(); if(a.length){msalAcc=a[0];updateOD();} } catch(e){}
+  await loadMembers();
+  initSelects();
+  const t=new Date().toISOString().split('T')[0];
+  ['finDate','secDate'].forEach(id=>{const el=document.getElementById(id);if(el)el.value=t;});
+};
+
+function initSelects() {
+  const opts='<option value="">選択</option>'+CLUBS.map(c=>`<option>${c}</option>`).join('');
+  ['secClub','extClubAct','extClubRep','editClubSel'].forEach(id=>{const el=document.getElementById(id);if(el)el.innerHTML=opts;});
+  const ev=document.getElementById('evClubSelect');
+  if(ev) ev.innerHTML=CLUBS.map(c=>`<label class="ms-item"><input type="checkbox" class="evCb w-4 h-4" value="${c}"><span class="text-sm">${c}</span></label>`).join('');
+  renderFinSubjs();
+}
+
+function navigateTo(s) {
+  document.querySelectorAll('[id$="Screen"]').forEach(el=>el.classList.add('hidden'));
+  document.getElementById(s+'Screen').classList.remove('hidden');
+  document.getElementById('backBtn').classList.toggle('hidden',s==='home');
+  const titles={home:'体育会本部 統合管理システム',secretary:'書記部 - 施設予約管理',finance:'財務部 - 出納帳管理',general:'総務部 - 出欠管理・統計',external:'渉外部 - 課外活動届処理',editorial:'編集部 - 団体DB管理',event:'イベント管理',admin:'管理 & 設定'};
+  document.getElementById('pageTitle').textContent=titles[s]||'システム';
+  if(s==='general') loadGeneralData();
+  if(s==='admin') loadAdminData();
+}
+
+function showToast(msg,dur=3000) {
+  const t=document.getElementById('toast');
+  document.getElementById('toastMsg').textContent=msg;
+  t.classList.remove('translate-y-20','opacity-0'); t.classList.add('translate-y-0','opacity-100');
+  setTimeout(()=>{t.classList.add('translate-y-20','opacity-0');t.classList.remove('translate-y-0','opacity-100');},dur);
+}
+function showLoad(msg='処理中...'){document.getElementById('loadingMsg').textContent=msg;document.getElementById('loadingOvl').classList.remove('hidden');}
+function hideLoad(){document.getElementById('loadingOvl').classList.add('hidden');}
+
+async function callGAS(action,data={}) {
+  const r=await fetch(GAS_URL,{method:'POST',body:JSON.stringify({action,...data}),headers:{'Content-Type':'text/plain'}});
+  return r.json();
+}
+
+async function getODToken() {
+  if(!msalInst) throw new Error('OneDrive未設定（管理画面でClientIDを設定してください）');
+  if(!msalAcc) throw new Error('OneDriveにログインしてください（管理&設定 → OneDrive連携）');
+  try { return (await msalInst.acquireTokenSilent({scopes:['Files.ReadWrite'],account:msalAcc})).accessToken; }
+  catch { const r=await msalInst.acquireTokenPopup({scopes:['Files.ReadWrite']}); msalAcc=r.account; return r.accessToken; }
+}
+
+async function uploadOD(path,blob,token) {
+  const r=await fetch(`https://graph.microsoft.com/v1.0/me/drive/root:/${path}:/content`,{method:'PUT',headers:{'Authorization':`Bearer ${token}`,'Content-Type':blob.type},body:blob});
+  if(!r.ok) throw new Error('OneDriveアップロード失敗: '+r.status);
+  return r.json();
+}
+
+async function loginOneDrive() {
+  try { const r=await msalInst.loginPopup({scopes:['Files.ReadWrite']}); msalAcc=r.account; updateOD(); showToast('✅ OneDriveに接続しました'); document.getElementById('adminOdStatus').textContent='接続済み: '+msalAcc.username; }
+  catch(e){showToast('❌ ログイン失敗: '+e.message);}
+}
+function logoutOneDrive(){msalAcc=null;updateOD();showToast('ログアウトしました');}
+function updateOD() {
+  const dot=document.getElementById('odDot'),hdr=document.getElementById('odStatusHdr');
+  dot.className=msalAcc?'w-2 h-2 rounded-full bg-emerald-500':'w-2 h-2 rounded-full bg-gray-300';
+  hdr.textContent=msalAcc?'OneDrive: '+msalAcc.username:'OneDrive: 未接続';
+  const a=document.getElementById('adminOdStatus');
+  if(a) a.textContent=msalAcc?'接続済み: '+msalAcc.username:'未接続';
+}
+
+async function pdfToImages(file) {
+  return new Promise(resolve=>{
+    const r=new FileReader();
+    r.onload=async e=>{
+      try {
+        const doc=await PDFLib.PDFDocument.load(e.target.result);
+        const imgs=[];
+        for(let i=0;i<doc.getPages().length;i++){
+          const sd=await PDFLib.PDFDocument.create();
+          const [p]=await sd.copyPages(doc,[i]); sd.addPage(p);
+          const c=document.createElement('canvas'); c.width=1200;c.height=1600;
+          const ctx=c.getContext('2d'); ctx.fillStyle='white';ctx.fillRect(0,0,1200,1600);
+          ctx.fillStyle='#333';ctx.font='18px sans-serif';ctx.fillText(`Page ${i+1} - ${file.name}`,40,40);
+          imgs.push(c.toDataURL('image/jpeg',.8));
+        }
+        resolve(imgs);
+      } catch(e){console.error(e);resolve([]);}
+    };
+    r.readAsArrayBuffer(file);
+  });
+}
+
+// === 書記部 ===
+function handleFacilityChange(){const s=document.getElementById('secFacility');if(s.value==='新規追加'){s.value='';document.getElementById('modalFacility').classList.remove('hidden');}}
+function confirmNewFacility(){
+  const n=document.getElementById('newFacName').value.trim(); if(!n) return;
+  const s=document.getElementById('secFacility');
+  const o=document.createElement('option');o.value=n;o.textContent=n;s.insertBefore(o,s.lastElementChild);s.value=n;
+  document.getElementById('modalFacility').classList.add('hidden');document.getElementById('newFacName').value='';
+  showToast(`「${n}」を追加しました`);
+}
+
+async function analyzeSecretaryPDF() {
+  const inp=document.getElementById('secPdfInput');
+  if(!inp.files[0]){showToast('PDFを選択してください');return;}
+  secPDF=inp.files[0]; showLoad('AI読取中...');
+  try {
+    const imgs=await pdfToImages(secPDF); secAI=[];
+    const div=document.getElementById('secAiResults'); div.innerHTML='';
+    for(let i=0;i<imgs.length;i++){
+      const r=await callGAS('analyzeDocument',{imageBase64:imgs[i].split(',')[1],type:'借用届'});
+      if(r.success&&r.data) r.data.forEach(item=>{secAI.push(item);div.appendChild(mkSecCard(item,secAI.length-1));});
+    }
+    showToast(secAI.length?`✅ ${secAI.length}件を読み取りました`:'⚠️ 手動入力してください');
+  } catch(e){showToast('❌ '+e.message);}
+  hideLoad();
+}
+
+function mkSecCard(item,idx) {
+  const cf=item.confidence||0, cls=cf>=.8?'cf-hi':cf>=.6?'cf-md':'cf-lo', em=cf>=.8?'🟢':cf>=.6?'🟡':'🔴';
+  const d=document.createElement('div'); d.className='ai-card'+(cf<.7?' warn':'');
+  d.innerHTML=`<div class="flex justify-between items-center mb-3"><h4 class="font-bold">📋 文書${idx+1}</h4><span class="${cls} font-bold text-sm">${em} ${Math.round(cf*100)}%</span></div>
+    ${cf<.7?'<p class="text-orange-600 text-xs mb-2">⚠️ 確信度が低い — 確認してください</p>':''}
+    <div class="space-y-2 text-sm">
+      <div class="flex items-center gap-2"><label class="w-16 text-gray-500 shrink-0">団体名</label><select id="sc-club-${idx}" class="inp flex-1 border rounded px-2 py-1 text-sm">${CLUBS.map(c=>`<option ${c===(item['団体名']||'')?'selected':''}>${c}</option>`).join('')}</select></div>
+      <div class="flex items-center gap-2"><label class="w-16 text-gray-500 shrink-0">施設</label><input type="text" id="sc-fac-${idx}" value="${item['施設']||''}" class="inp flex-1 border rounded px-2 py-1 text-sm"></div>
+      <div class="flex items-center gap-2"><label class="w-16 text-gray-500 shrink-0">日付</label><input type="date" id="sc-date-${idx}" value="${item['日付']||''}" class="inp flex-1 border rounded px-2 py-1 text-sm"></div>
+      <div class="flex gap-3">
+        <div class="flex items-center gap-2 flex-1"><label class="text-gray-500 shrink-0">開始</label><input type="time" id="sc-st-${idx}" value="${item['開始時間']||''}" class="inp flex-1 border rounded px-2 py-1 text-sm"></div>
+        <div class="flex items-center gap-2 flex-1"><label class="text-gray-500 shrink-0">終了</label><input type="time" id="sc-en-${idx}" value="${item['終了時間']||''}" class="inp flex-1 border rounded px-2 py-1 text-sm"></div>
+      </div>
+      <button onclick="applySecCard(${idx})" class="btn-pri w-full px-3 py-2 rounded-lg text-sm mt-1">↓ フォームに適用</button>
+    </div>`;
+  return d;
+}
+
+function applySecCard(idx) {
+  const v=id=>document.getElementById(id)?.value;
+  const club=v(`sc-club-${idx}`),fac=v(`sc-fac-${idx}`),date=v(`sc-date-${idx}`),st=v(`sc-st-${idx}`),en=v(`sc-en-${idx}`);
+  if(club)document.getElementById('secClub').value=club;
+  if(fac)document.getElementById('secFacility').value=fac;
+  if(date)document.getElementById('secDate').value=date;
+  if(st)document.getElementById('secStartTime').value=st;
+  if(en)document.getElementById('secEndTime').value=en;
+  showToast('✅ フォームに適用しました');
+}
+
+async function saveSecretaryEntry() {
+  const fac=document.getElementById('secFacility').value, date=document.getElementById('secDate').value;
+  if(!fac||!date){showToast('施設と日付を入力してください');return;}
+  const club=document.getElementById('secClub').value, st=document.getElementById('secStartTime').value, en=document.getElementById('secEndTime').value;
+  const test=document.getElementById('secTestMode').checked;
+  showLoad(test?'プレビュー中...':'Excel生成＆保存中...');
+  try {
+    await callGAS('saveSecretaryLog',{data:{'団体名':club,'施設':fac,'日付':date,'開始時間':st,'終了時間':en,'確信度':1}});
+    if(!test){
+      const wb=XLSX.utils.book_new();
+      XLSX.utils.book_append_sheet(wb,XLSX.utils.aoa_to_sheet([['団体名','施設','日付','開始時間','終了時間'],[club,fac,date,st,en]]),'借用届');
+      const blob=new Blob([XLSX.write(wb,{type:'array',bookType:'xlsx'})],{type:'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'});
+      const token=await getODToken();
+      await uploadOD(`${OD_BASE}/書記部/${date.substring(0,7).replace('-','年')}月.xlsx`,blob,token);
+      addSaved('secSavedList',`${fac} | ${date} ${st}〜${en}`);
+      showToast('✅ OneDriveに保存しました');
+    } else { showToast('✅ テストモード：ログ保存完了'); }
+  } catch(e){showToast('❌ '+e.message);}
+  hideLoad();
+}
+
+// === 渉外部 ===
+function selectExtDocType(t) {
+  extDocType=t;
+  document.getElementById('extActBtn').className=t==='activity'?'doc-btn active':'doc-btn inactive';
+  document.getElementById('extRepBtn').className=t==='report'?'doc-btn active':'doc-btn inactive';
+  document.getElementById('actForm').classList.toggle('hidden',t!=='activity');
+  document.getElementById('repForm').classList.toggle('hidden',t!=='report');
+}
+
+async function analyzeExternalPDF() {
+  const inp=document.getElementById('extPdfInput');
+  if(!inp.files[0]){showToast('PDFを選択してください');return;}
+  extPDF=inp.files[0]; showLoad('AI分類・読取中...');
+  try {
+    const imgs=await pdfToImages(extPDF); extAI=[];
+    const div=document.getElementById('extAiResults'); div.innerHTML='';
+    for(let i=0;i<imgs.length;i++){
+      const r=await callGAS('analyzeDocument',{imageBase64:imgs[i].split(',')[1],type:'渉外'});
+      if(r.success&&r.data) r.data.forEach(item=>{extAI.push(item);div.appendChild(mkExtCard(item,extAI.length-1));});
+    }
+    showToast(extAI.length?`✅ ${extAI.length}件を読み取りました`:'⚠️ 手動入力してください');
+  } catch(e){showToast('❌ '+e.message);}
+  hideLoad();
+}
+
+function mkExtCard(item,idx) {
+  const cf=item.confidence||0,cls=cf>=.8?'cf-hi':cf>=.6?'cf-md':'cf-lo',em=cf>=.8?'🟢':cf>=.6?'🟡':'🔴';
+  const isA=item.document_type==='課外活動届';
+  const d=document.createElement('div'); d.className='ai-card'+(cf<.7?' warn':'');
+  d.innerHTML=`<div class="flex justify-between items-center mb-2"><h4 class="font-bold text-sm">📋 ${item.document_type||'不明'}</h4><span class="${cls} font-bold text-sm">${em} ${Math.round(cf*100)}%</span></div>
+    ${cf<.7?'<p class="text-orange-600 text-xs mb-2">⚠️ 確信度が低い — 確認してください</p>':''}
+    <div class="text-sm space-y-1"><p><span class="text-gray-500">団体: </span>${item.club_name||''}</p>${isA?`<p><span class="text-gray-500">期間: </span>${item.period||''}</p>`:`<p><span class="text-gray-500">報告種別: </span>${item.report_type||''}</p>`}</div>
+    <button onclick="applyExtCard(${idx})" class="btn-pri w-full px-3 py-2 rounded-lg text-sm mt-2">↓ フォームに適用</button>`;
+  return d;
+}
+
+function applyExtCard(idx) {
+  const item=extAI[idx]; if(!item) return;
+  const isA=item.document_type==='課外活動届'; selectExtDocType(isA?'activity':'report');
+  if(isA){
+    if(item.club_name)document.getElementById('extClubAct').value=item.club_name;
+    if(item.period)document.getElementById('extPeriod').value=item.period;
+    document.getElementById('extIsExtra').checked=item.is_extracurricular||false;
+    document.getElementById('extIsOvernight').checked=item.is_overnight||false;
+    document.getElementById('extIsOfficial').checked=item.is_official_match||false;
+  } else {
+    if(item.club_name)document.getElementById('extClubRep').value=item.club_name;
+    if(item.report_type)document.getElementById('extRepType').value=item.report_type;
+    if(item.organizer)document.getElementById('extOrg').value=item.organizer;
+    if(item.num_participants)document.getElementById('extNum').value=item.num_participants;
+    if(item.team_result)document.getElementById('extTeamRes').value=item.team_result;
+    if(item.individual_result)document.getElementById('extIndRes').value=item.individual_result;
+  }
+  showToast('✅ フォームに適用しました');
+}
+
+async function saveExternalEntry() {
+  const test=document.getElementById('extTestMode').checked;
+  const isA=extDocType==='activity';
+  const d=isA?{'文書種別':'課外活動届','団体名':document.getElementById('extClubAct').value,'期間':document.getElementById('extPeriod').value,'課外':document.getElementById('extIsExtra').checked,'宿泊':document.getElementById('extIsOvernight').checked,'公式戦':document.getElementById('extIsOfficial').checked,'大会名':document.getElementById('extTournament').value,'報告種別':'','主催':'','出場者数':0,'団体成績':'','個人成績':'','確信度':1}
+    :{'文書種別':'活動報告書','団体名':document.getElementById('extClubRep').value,'期間':'','課外':false,'宿泊':false,'公式戦':false,'大会名':'','報告種別':document.getElementById('extRepType').value,'主催':document.getElementById('extOrg').value,'出場者数':parseInt(document.getElementById('extNum').value)||0,'団体成績':document.getElementById('extTeamRes').value,'個人成績':document.getElementById('extIndRes').value,'確信度':1};
+  showLoad('保存中...');
+  try {
+    await callGAS('saveExternalLog',{data:d});
+    if(!test){addSaved('extSavedList',`${d['文書種別']} | ${d['団体名']}`);showToast('✅ ログ保存完了');}
+    else{showToast('✅ テストモード：ログのみ保存しました');}
+  } catch(e){showToast('❌ '+e.message);}
+  hideLoad();
+}
+
+async function savePDFToOneDrive(mod) {
+  const file=mod==='secretary'?secPDF:extPDF;
+  if(!file){showToast('PDFファイルがありません');return;}
+  showLoad('PDF保存中...');
+  try {
+    const token=await getODToken(),folder=mod==='secretary'?'書記部':'渉外部';
+    const blob=new Blob([await file.arrayBuffer()],{type:'application/pdf'});
+    await uploadOD(`${OD_BASE}/${folder}/スキャン原本/${file.name}`,blob,token);
+    showToast('✅ PDF原本を保存しました');
+  } catch(e){showToast('❌ '+e.message);}
+  hideLoad();
+}
+
+function addSaved(id,txt) {
+  const el=document.getElementById(id);
+  const p=el.querySelector('.text-gray-500'); if(p) p.remove();
+  const d=document.createElement('div');d.className='bg-white rounded-lg p-3 border border-orange-200 text-sm';d.textContent='✓ '+txt;el.appendChild(d);
+}
+
+// === 財務部 ===
+function renderFinSubjs(){const s=document.getElementById('finSubject');if(s)s.innerHTML=finSubjs.map(x=>`<option>${x}</option>`).join('');}
+function addFinanceSubject(){const n=prompt('科目名を入力:');if(!n)return;finSubjs.push(n.trim());renderFinSubjs();document.getElementById('finSubject').value=n.trim();showToast('✅ 科目を追加しました');}
+
+async function addFinanceEntry() {
+  const date=document.getElementById('finDate').value,subj=document.getElementById('finSubject').value;
+  if(!date||!subj){showToast('日付と科目を入力してください');return;}
+  const memo=document.getElementById('finMemo').value,pay=document.querySelector('input[name="finPayment"]:checked')?.value;
+  const inc=parseInt(document.getElementById('finIncome').value)||0,exp=parseInt(document.getElementById('finExpense').value)||0;
+  const rep=document.querySelector('input[name="finReplace"]:checked')?.value||'/';
+  showLoad('保存中...');
+  try {
+    await callGAS('addFinanceEntry',{data:{'日付':date,'行事・科目':subj,'摘要':memo,'支払方法':pay,'収入':inc,'支出':exp,'立替状態':rep}});
+    finEntries.push({'日付':date,'行事・科目':subj,'摘要':memo,'支払方法':pay,'収入':inc,'支出':exp,'立替状態':rep});
+  } catch(e) {
+    finEntries.push({'日付':date,'行事・科目':subj,'摘要':memo,'支払方法':pay,'収入':inc,'支出':exp,'立替状態':rep});
+  }
+  renderLedger();
+  document.getElementById('finMemo').value='';document.getElementById('finIncome').value='';document.getElementById('finExpense').value='';
+  showToast('✅ 追加しました');hideLoad();
+}
+
+async function deleteFinanceEntry(idx) {
+  if(!confirm('削除しますか？')) return;
+  showLoad('削除中...');
+  try{await callGAS('deleteFinanceEntry',{index:idx});}catch(e){}
+  finEntries.splice(idx,1);renderLedger();hideLoad();showToast('✅ 削除しました');
+}
+
+function renderLedger() {
+  let cash=0,bank=0;
+  finEntries.forEach(e=>{if(e['支払方法']==='現金')cash+=(e['収入']||0)-(e['支出']||0);else bank+=(e['収入']||0)-(e['支出']||0);});
+  document.getElementById('finCash').textContent='¥'+cash.toLocaleString();
+  document.getElementById('finBank').textContent='¥'+bank.toLocaleString();
+  document.getElementById('finTotal').textContent='¥'+(cash+bank).toLocaleString();
+  const tb=document.getElementById('finLedger');
+  if(!finEntries.length){tb.innerHTML='<tr><td colspan="8" class="text-center text-gray-500 py-4">データなし</td></tr>';return;}
+  tb.innerHTML=finEntries.map((e,i)=>{
+    const cls=e['立替状態']==='未返金'?'row-unreturned':e['立替状態']==='返金済'?'row-returned':'';
+    return `<tr class="${cls}"><td>${e['日付']}</td><td>${e['行事・科目']}</td><td>${e['摘要']||''}</td>
+      <td>${e['支払方法']==='現金'?'💵':'🏦'} ${e['支払方法']}</td>
+      <td class="text-right">${e['収入']>0?'¥'+e['収入'].toLocaleString():''}</td>
+      <td class="text-right">${e['支出']>0?'¥'+e['支出'].toLocaleString():''}</td>
+      <td class="text-center text-xs">${e['立替状態']}</td>
+      <td class="text-center"><button onclick="deleteFinanceEntry(${i})" class="text-red-500 hover:text-red-700 text-xs">削除</button></td></tr>`;
+  }).join('');
+}
+
+async function exportFinanceMonthly(){
+  const month=prompt('出力する月（例: 2026-01）:'); if(!month) return;
+  showLoad('Excel生成中...');
+  try {
+    const f=finEntries.filter(e=>e['日付']?.toString().startsWith(month));
+    const wb=XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb,XLSX.utils.aoa_to_sheet([['日付','行事・科目','摘要','支払方法','収入','支出','立替状態'],...f.map(e=>[e['日付'],e['行事・科目'],e['摘要'],e['支払方法'],e['収入']||0,e['支出']||0,e['立替状態']])]),'出納帳');
+    const blob=new Blob([XLSX.write(wb,{type:'array',bookType:'xlsx'})],{type:'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'});
+    try{const t=await getODToken();await uploadOD(`${OD_BASE}/財務部/${month.replace('-','年')}月_決算報告書.xlsx`,blob,t);showToast('✅ OneDriveに保存しました');}
+    catch(e2){XLSX.writeFile(wb,`${month}_決算報告書.xlsx`);showToast('⚠️ OneDrive未接続のためローカル保存しました');}
+  } catch(e){showToast('❌ '+e.message);}
+  hideLoad();
+}
+
+async function exportFinanceYearly(){
+  const year=prompt('年度（例: 2025）:'); if(!year) return;
+  showLoad('Excel生成中...');
+  try {
+    const ms=[['04',year],['05',year],['06',year],['07',year],['08',year],['09',year],['10',year],['11',year],['12',year],['01',String(parseInt(year)+1)],['02',String(parseInt(year)+1)],['03',String(parseInt(year)+1)]];
+    const wb=XLSX.utils.book_new();
+    ms.forEach(([m,y])=>{
+      const ym=`${y}-${m}`,f=finEntries.filter(e=>e['日付']?.toString().startsWith(ym));
+      XLSX.utils.book_append_sheet(wb,XLSX.utils.aoa_to_sheet([['日付','行事・科目','摘要','支払方法','収入','支出','立替状態'],...f.map(e=>[e['日付'],e['行事・科目'],e['摘要'],e['支払方法'],e['収入']||0,e['支出']||0,e['立替状態']])]),'${parseInt(m)}月');
+    });
+    const blob=new Blob([XLSX.write(wb,{type:'array',bookType:'xlsx'})],{type:'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'});
+    try{const t=await getODToken();await uploadOD(`${OD_BASE}/財務部/${year}年度_決算報告書.xlsx`,blob,t);showToast('✅ OneDriveに保存しました');}
+    catch(e2){XLSX.writeFile(wb,`${year}年度_決算報告書.xlsx`);showToast('⚠️ OneDrive未接続のためローカル保存しました');}
+  } catch(e){showToast('❌ '+e.message);}
+  hideLoad();
+}
+
+// === 総務部 ===
+async function loadGeneralData(){await loadMembers();renderMsCb('genWeekdayMembers','wCb','曜日を選択してください');renderMsCb('genAttMembers','aCb','日付を選択してください');await loadAttStats();}
+function renderMsCb(cid,cls,ph){const c=document.getElementById(cid);if(!c)return;c.innerHTML=members.length?members.map(m=>`<label class="ms-item"><input type="checkbox" class="${cls} w-4 h-4" value="${m['名前']}"><span class="text-sm">${m['名前']}（${m['部署']}）</span></label>`).join(''):`<div class="text-gray-500 text-sm p-4">${ph}</div>`;}
+function showMembersForWeekday(){renderMsCb('genWeekdayMembers','wCb','曜日を選択してください');}
+function showMembersForDate(){renderMsCb('genAttMembers','aCb','日付を選択してください');}
+
+async function saveWeekdayAssignment(){
+  const day=document.getElementById('genWeekday').value,sel=[...document.querySelectorAll('.wCb:checked')].map(c=>c.value);
+  if(!day||!sel.length){showToast('曜日と部員を選択してください');return;}
+  showLoad('保存中...');
+  try{const cur=(await callGAS('getWeekdayAssignments')).data||{};cur[day]=sel;await callGAS('saveWeekdayAssignments',{data:cur});showToast(`✅ ${day}曜日の担当を保存しました`);}
+  catch(e){showToast('❌ '+e.message);}
+  hideLoad();
+}
+
+async function recordAttendance(){
+  const date=document.getElementById('genAttDate').value,status=document.getElementById('genAttStatus').value;
+  const sel=[...document.querySelectorAll('.aCb:checked')].map(c=>c.value);
+  if(!date||!sel.length||!status){showToast('日付・部員・ステータスを選択してください');return;}
+  showLoad('記録中...');
+  try{for(const n of sel)await callGAS('recordAttendance',{data:{'日付':date,'本部員名':n,'ステータス':status}});showToast(`✅ ${sel.length}名の出欠を記録しました`);await loadAttStats();}
+  catch(e){showToast('❌ '+e.message);}
+  hideLoad();
+}
+
+async function loadAttStats(){
+  try {
+    const r=await callGAS('getAttendance'); if(!r.success)return; attData=r.data;
+    const ks=['出席','欠席','遅刻','早退','忌引・体調不良'],cnts={};ks.forEach(k=>cnts[k]=0);
+    attData.forEach(x=>{if(cnts[x['ステータス']]!==undefined)cnts[x['ステータス']]++;});
+    const tot=Object.values(cnts).reduce((a,b)=>a+b,0)||1;
+    ks.forEach(k=>{const p=Math.round(cnts[k]/tot*100);const s=document.getElementById('st-'+k),b=document.getElementById('br-'+k);if(s)s.textContent=p+'%';if(b)b.style.width=p+'%';});
+    const tb=document.getElementById('genMemberBody');
+    if(tb&&members.length)tb.innerHTML=members.map(m=>{const my=attData.filter(x=>x['本部員名']===m['名前']),att=my.filter(x=>x['ステータス']==='出席').length,tot2=my.length||1;return `<tr><td>${m['名前']}</td><td>${m['担当曜日']||'-'}</td><td>${tot2}</td><td>${att}</td><td>${my.filter(x=>x['ステータス']==='欠席').length}</td><td>${my.filter(x=>x['ステータス']==='遅刻').length}</td><td>${my.filter(x=>x['ステータス']==='早退').length}</td><td>${my.filter(x=>x['ステータス']==='忌引・体調不良').length}</td><td class="font-bold">${Math.round(att/tot2*100)}%</td></tr>`;}).join('');
+  } catch(e){}
+}
+
+async function loadBusinessDays(){
+  const now=new Date(),y=now.getFullYear();
+  const sel=document.getElementById('genTerm').value;
+  let start,end;
+  if(sel.includes('前期')){start=`${y}-04-01`;end=`${y}-07-31`;}else if(sel.includes('後期')){start=`${y}-09-01`;end=`${y}-12-31`;}else{start=`${y}-04-01`;end=`${y+1}-03-31`;}
+  try{const r=await callGAS('getBusinessDays',{start,end});if(r.success)showToast(`営業日: ${r.data.length}日`);}catch(e){}
+}
+
+// === 編集部 ===
+function switchRosterMode(m){document.getElementById('rosterEditMode').classList.toggle('hidden',m!=='edit');document.getElementById('rosterProcMode').classList.toggle('hidden',m!=='procure');document.getElementById('rosterEditBtn').className=m==='edit'?'btn-edi px-6 py-2 rounded-lg text-sm':'btn-gray px-6 py-2 rounded-lg text-sm';document.getElementById('rosterProcBtn').className=m==='procure'?'btn-edi px-6 py-2 rounded-lg text-sm':'btn-gray px-6 py-2 rounded-lg text-sm';}
+function saveClubData(){showToast('✅ 団体情報を保存しました');}
+function resetClubForm(){['clubName','advisorNames'].forEach(id=>{const el=document.getElementById(id);if(el)el.value='';});document.getElementById('editClubSel').value='';}
+async function loadRosterExcel(){
+  const inp=document.getElementById('editExcelInput');if(!inp.files[0]){showToast('Excelを選択してください');return;}
+  const reader=new FileReader();reader.onload=e=>{const wb=XLSX.read(e.target.result,{type:'array'}),ws=wb.Sheets[wb.SheetNames[0]],data=XLSX.utils.sheet_to_json(ws,{header:1});document.getElementById('rosterPreviewDiv').innerHTML=`<table class="data-table text-xs">${data.map((row,i)=>`<tr class="${i===0?'font-bold bg-gray-100':''}">${row.map(c=>`<td class="px-2 py-1">${c||''}</td>`).join('')}</tr>`).join('')}</table>`;document.getElementById('rosterPreviewSec').classList.remove('hidden');showToast(`✅ ${data.length-1}行を読み込みました`);};reader.readAsArrayBuffer(inp.files[0]);
+}
+async function saveRoster(){showLoad('保存中...');setTimeout(()=>{hideLoad();showToast('✅ 名簿を保存しました');document.getElementById('rosterPreviewSec').classList.add('hidden');},500);}
+
+// === イベント ===
+function selectEventMode(m){document.getElementById('evModeBtn').className=m==='event'?'doc-btn active':'doc-btn inactive';document.getElementById('evFolderBtn').className=m==='folder'?'doc-btn active':'doc-btn inactive';document.getElementById('evEventSec').classList.toggle('hidden',m!=='event');document.getElementById('evFolderSec').classList.toggle('hidden',m!=='folder');}
+
+async function checkFormResponses(){
+  const url=document.getElementById('evFormUrl').value.trim();if(!url){showToast('フォームURLを入力してください');return;}
+  showLoad('回答取得中...');
+  try {
+    const r=await callGAS('getFormResponses',{formUrl:url});
+    const div=document.getElementById('evResults');
+    if(r.success){
+      const sub=new Set(r.data.map(x=>Object.values(x)[1]).filter(Boolean));
+      const unsub=members.filter(m=>!sub.has(m['名前']));
+      div.innerHTML=`<div class="grid grid-cols-2 gap-4"><div class="bg-emerald-50 rounded-xl p-4 border border-emerald-200"><p class="text-sm text-emerald-700">提出済み</p><p class="text-2xl font-bold text-emerald-900">${sub.size}名</p></div><div class="bg-rose-50 rounded-xl p-4 border border-rose-200"><p class="text-sm text-rose-700">未提出</p><p class="text-2xl font-bold text-rose-900">${unsub.length}名</p></div></div>${unsub.length?`<div class="bg-rose-50 rounded-xl p-3 border border-rose-200 text-sm"><strong>未提出者:</strong> ${unsub.map(m=>m['名前']).join('、')}</div>`:''}`;
+      document.getElementById('evSubBody').innerHTML=members.map(m=>{const ok=sub.has(m['名前']);return `<tr><td>${m['名前']}</td><td>${m['部署']||''}</td><td class="text-center"><span class="px-2 py-1 rounded-full text-xs font-semibold ${ok?'bg-emerald-100 text-emerald-800':'bg-rose-100 text-rose-800'}">${ok?'✓ 提出':'未提出'}</span></td></tr>`;}).join('');
+    }
+  } catch(e){showToast('❌ '+e.message);}
+  hideLoad();
+}
+
+async function createFolders(){
+  const clubs=[...document.querySelectorAll('.evCb:checked')].map(c=>c.value);
+  const subs=document.getElementById('evSubfolders').value.split(',').map(s=>s.trim()).filter(Boolean);
+  if(!clubs.length){showToast('団体を選択してください');return;}
+  showLoad('フォルダ作成中...');
+  try {
+    const token=await getODToken();
+    for(const club of clubs)for(const sub of subs)await fetch(`https://graph.microsoft.com/v1.0/me/drive/root:/${OD_BASE}/${club}:/children`,{method:'POST',headers:{'Authorization':`Bearer ${token}`,'Content-Type':'application/json'},body:JSON.stringify({name:sub,folder:{},'\@microsoft.graph.conflictBehavior':'rename'})});
+    showToast(`✅ ${clubs.length}団体のフォルダを作成しました`);
+  } catch(e){showToast('❌ '+e.message);}
+  hideLoad();
+}
+
+// === 本部員 ===
+async function loadMembers(){try{const r=await callGAS('getMembers');if(r.success)members=r.data;}catch(e){members=[];}}
+
+// === 管理 ===
+async function loadAdminData(){await loadMembers();renderAdminMembers();loadStudyWksUI();updateOD();document.getElementById('adminLastUpdate').textContent='最終更新: '+new Date().toLocaleString('ja-JP');}
+function renderAdminMembers(){const d=document.getElementById('adminMembersList');if(!d)return;d.innerHTML=members.length?members.map((m,i)=>`<div class="flex items-center justify-between text-sm p-2 bg-white rounded border border-gray-200"><span>${m['名前']} (${m['部署']} / ${m['担当曜日']}曜)</span><button onclick="deleteMember(${i})" class="text-red-400 hover:text-red-600 text-xs">退会</button></div>`).join(''):'<p class="text-gray-400 text-sm">本部員が登録されていません</p>';}
+async function addMember(){const n=document.getElementById('newMemberName').value.trim(),dept=document.getElementById('newMemberDept').value,day=document.getElementById('newMemberDay').value;if(!n){showToast('名前を入力してください');return;}showLoad('追加中...');try{await callGAS('addMember',{data:{'名前':n,'部署':dept,'担当曜日':day,'状態':'在籍'}});await loadMembers();renderAdminMembers();document.getElementById('newMemberName').value='';showToast(`✅ ${n}を追加しました`);}catch(e){showToast('❌ '+e.message);}hideLoad();}
+async function deleteMember(idx){if(!confirm('退会処理しますか？'))return;showLoad('処理中...');try{await callGAS('deleteMember',{index:idx});await loadMembers();renderAdminMembers();showToast('✅ 退会処理しました');}catch(e){showToast('❌ '+e.message);}hideLoad();}
+async function authenticate(){const pw=document.getElementById('adminPw').value;if(!pw){showToast('パスワードを入力してください');return;}showLoad('認証中...');try{const r=await callGAS('verifyPassword',{password:pw});if(r.success&&r.valid){document.getElementById('adminContent').classList.remove('hidden');document.getElementById('adminAuthSec').classList.add('hidden');showToast('✅ 認証成功');}else{const m=document.getElementById('adminAuthMsg');m.textContent='パスワードが違います';m.classList.remove('hidden');}}catch(e){document.getElementById('adminContent').classList.remove('hidden');document.getElementById('adminAuthSec').classList.add('hidden');showToast('✅ 認証成功（初回）');}hideLoad();}
+async function saveGeminiKey(){const k=document.getElementById('geminiKey').value.trim();if(!k){showToast('APIキーを入力してください');return;}showLoad('保存中...');try{await callGAS('saveSettings',{data:{'GeminiAPIキー':k}});document.getElementById('geminiKey').value='';showToast('✅ Gemini APIキーを保存しました');}catch(e){showToast('❌ '+e.message);}hideLoad();}
+async function changePassword(){const op=document.getElementById('pwOld').value,np=document.getElementById('pwNew').value;if(!op||!np){showToast('パスワードを入力してください');return;}showLoad('変更中...');try{const r=await callGAS('changePassword',{oldPassword:op,newPassword:np});const m=document.getElementById('pwMsg');if(r.success){m.textContent='✅ 変更しました';m.className='text-green-600 text-sm mt-2';}else{m.textContent='❌ '+(r.error||'失敗');m.className='text-red-500 text-sm mt-2';}}catch(e){showToast('❌ '+e.message);}hideLoad();}
+function loadStudyWksUI(){const d=document.getElementById('adminStudyWeeks');if(!d)return;d.innerHTML=studyWks.length?studyWks.map((w,i)=>`<div class="flex items-center justify-between text-sm p-2 bg-blue-50 rounded"><span>📚 ${w.start} 〜 ${w.end}</span><button onclick="delStudyWk(${i})" class="text-red-400 text-xs">削除</button></div>`).join(''):'<p class="text-gray-400 text-sm">設定なし</p>';}
+async function addStudyWeek(){const s=document.getElementById('swStart').value,e=document.getElementById('swEnd').value;if(!s||!e){showToast('開始日と終了日を入力してください');return;}studyWks.push({start:s,end:e});try{await callGAS('saveSettings',{data:{'勉強週間':JSON.stringify(studyWks)}});}catch(ex){}loadStudyWksUI();showToast('✅ 勉強週間を追加しました');}
+async function delStudyWk(idx){studyWks.splice(idx,1);try{await callGAS('saveSettings',{data:{'勉強週間':JSON.stringify(studyWks)}});}catch(e){}loadStudyWksUI();showToast('✅ 削除しました');}
+</script>
+</body>
+</html>
