@@ -1,0 +1,31 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <title>認証中...</title>
+  <script src="https://alcdn.msauth.net/browser/2.38.0/js/msal-browser.min.js"></script>
+</head>
+<body>
+  <p style="font-family:sans-serif;text-align:center;margin-top:100px;color:#666;">
+    Microsoft認証処理中...<br>このウィンドウは自動的に閉じます。
+  </p>
+  <script>
+    const msalInstance = new msal.PublicClientApplication({
+      auth: {
+        clientId: "YOUR_CLIENT_ID",
+        authority: "https://login.microsoftonline.com/common",
+        redirectUri: "https://Goto-0520.github.io/taiikukai-system/callback.html"
+      }
+    });
+    msalInstance.initialize().then(() => {
+      msalInstance.handleRedirectPromise().then(response => {
+        if (response) {
+          window.close();
+        }
+      }).catch(err => {
+        console.error(err);
+      });
+    });
+  </script>
+</body>
+</html>
